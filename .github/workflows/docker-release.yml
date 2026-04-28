@@ -1,18 +1,9 @@
 name: Docker Release
 
-# Triggered when a GitHub Release is published.
-# Builds a multi-platform Docker image and pushes it to GitHub Container Registry (GHCR).
-#
-# Image: ghcr.io/hkuds/deeptutor
-# Tags:
-#   - Version tag stripped of 'v' prefix (e.g. release v1.2.3 → image tag 1.2.3)
-#   - latest (always points to the most recently published release)
-#
-# Platforms: linux/amd64, linux/arm64
-
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,11 +18,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Required for linux/arm64 cross-compilation on GitHub-hosted ubuntu runners
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # Enable BuildKit with multi-platform build support
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -42,14 +31,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Extract tags from the release:
-      #   type=semver strips the leading 'v' (v1.2.3 → 1.2.3)
-      #   type=raw adds a 'latest' tag on every published release
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/hkuds/deeptutor
+          images: ghcr.io/giyear/deeptutor
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest
@@ -64,11 +50,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Pass the release tag (e.g. "v1.2.3") into the Next.js build so the
-          # sidebar version badge can show the running version at runtime.
           build-args: |
-            APP_VERSION=${{ github.ref_name }}
-          # Use GitHub Actions cache to speed up repeated builds
-          # mode=max caches all intermediate layers (frontend-builder and python-base are expensive)
+            APP_VERSION=${{ github.ref_name || 'fork' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
