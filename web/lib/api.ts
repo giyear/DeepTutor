@@ -30,6 +30,12 @@ const LOOPBACK_HOSTS = new Set([
   "[::1]",
 ]);
 
+// Port mappings used when swapping from loopback to external host.
+// Key = build-time port, Value = external port.
+const PORT_MAP: Record<string, string> = {
+  "8001": "23333",
+};
+
 let warnedAboutHostSwap = false;
 
 function isLoopbackHost(host: string): boolean {
@@ -43,8 +49,12 @@ function isLoopbackHost(host: string): boolean {
  * http://localhost:<port>.  When another machine on the LAN opens the app that
  * constant still points at "localhost", which the remote browser resolves to
  * its *own* loopback address instead of the server.  We detect this situation
- * and swap the hostname for window.location.hostname so the request reaches
- * the actual server regardless of which machine opened the page.
+ * and swap the hostname so requests reach the actual server regardless of
+ * which machine opened the page.
+ *
+ * When the build-time port appears in a known PORT_MAP entry, we also swap
+ * the port (e.g. 8001 → 23333) so the request reaches the externally
+ * exposed port instead of the internal container port.
  *
  * The full path/search is preserved (so deployments behind a reverse proxy
  * like `http://localhost:8001/api` continue to work after the rewrite).
@@ -57,6 +67,11 @@ export function resolveBase(): string {
     const clientHost = window.location.hostname;
     if (isLoopbackHost(url.hostname) && !isLoopbackHost(clientHost)) {
       url.hostname = clientHost;
+      // Swap port if a mapping is defined (e.g. 8001 → 23333)
+      const origPort = url.port || (url.protocol === "https:" ? "443" : "80");
+      if (origPort in PORT_MAP) {
+        url.port = PORT_MAP[origPort];
+      }
       if (!warnedAboutHostSwap) {
         warnedAboutHostSwap = true;
         console.warn(
@@ -64,7 +79,6 @@ export function resolveBase(): string {
             `routing API/WebSocket calls to "${url.toString()}" instead.`,
         );
       }
-      // Use href (full URL) instead of origin so we keep any path/search.
       return url.toString().replace(/\/+$/, "");
     }
   } catch {
